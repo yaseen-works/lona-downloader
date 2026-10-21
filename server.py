@@ -147,18 +147,22 @@ def media_id(platform, url):
 # --------------------------------------------------------------------------
 
 def resolve_tiktok(url):
-    api = "https://www.tikwm.com/api/?url=" + urllib.parse.quote(url, safe="") + "&hd=1"
-    r = HTTP.get(api, timeout=30)
-    d = r.json()
-    if d.get("code") != 0 or not d.get("data"):
-        raise ValueError(GENERIC_ERR)
-    data = d["data"]
-    play = data.get("hdplay") or data.get("play")
-    if not play:
-        raise ValueError(GENERIC_ERR)
-    return {"kind": "direct", "url": play, "referer": "https://www.tiktok.com/",
-            "title": (data.get("title") or "TikTok video").strip(), "ext": "mp4",
-            "thumbnail": data.get("cover") or data.get("origin_cover")}
+    # Primary: tikwm API (HD, no watermark). Some hosts' IPs get a non-JSON
+    # block page from tikwm — any failure falls back to yt-dlp extraction.
+    try:
+        api = "https://www.tikwm.com/api/?url=" + urllib.parse.quote(url, safe="") + "&hd=1"
+        r = HTTP.get(api, timeout=30)
+        d = r.json()
+        if d.get("code") == 0 and d.get("data"):
+            data = d["data"]
+            play = data.get("hdplay") or data.get("play")
+            if play:
+                return {"kind": "direct", "url": play, "referer": "https://www.tiktok.com/",
+                        "title": (data.get("title") or "TikTok video").strip(), "ext": "mp4",
+                        "thumbnail": data.get("cover") or data.get("origin_cover")}
+    except Exception:
+        pass
+    return resolve_ytdlp("tiktok", url)
 
 
 def resolve_instagram(url):
