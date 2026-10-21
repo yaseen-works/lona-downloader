@@ -271,9 +271,17 @@
   }
 
   function saveBlob(blob, filename) {
+    filename = filename || 'lona-video.mp4';
+    // Inside the Lona Android app: hand the file to the app so it lands straight in the gallery.
+    if (window.LonaAndroid && window.LonaAndroid.saveBase64) {
+      var r = new FileReader();
+      r.onload = function () { window.LonaAndroid.saveBase64(r.result, filename); };
+      r.readAsDataURL(blob);
+      return;
+    }
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = filename || 'lona-video.mp4';
+    a.download = filename;
     document.body.appendChild(a); a.click();
     setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
   }
