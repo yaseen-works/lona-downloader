@@ -21,6 +21,8 @@ import threading
 import time
 import urllib.parse
 import xml.etree.ElementTree as ET
+from collections import deque
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import requests
@@ -77,6 +79,169 @@ def new_token(job):
     with TOKENS_LOCK:
         TOKENS[tok] = job
     return tok
+
+
+# --------------------------------------------------------------------------
+# Stats — Render's disk is ephemeral, so counters live in the free Abacus
+# counter API. All counting is fire-and-forget: it can never break or slow
+# a download. Recent downloads are kept in memory only (since restart).
+# --------------------------------------------------------------------------
+
+ABACUS_BASE = "https://abacus.jasoncameron.dev"
+ABACUS_NS = "lona-downloader-stats-yw"
+PKT = timezone(timedelta(hours=5))  # Asia/Karachi
+
+RECENT_DOWNLOADS = deque(maxlen=20)
+RECENT_LOCK = threading.Lock()
+
+ADMIN_PLATFORMS = ["tiktok", "youtube", "instagram", "pinterest",
+                   "x", "facebook", "reddit", "soundcloud"]
+
+
+def pkt_now():
+    return datetime.now(PKT)
+
+
+def _abacus_hit(counter):
+    try:
+        requests.get(f"{ABACUS_BASE}/hit/{ABACUS_NS}/{counter}", timeout=3)
+    except Exception:
+        pass
+
+
+def _abacus_get(counter):
+    """Counter value, 0 if it doesn't exist yet, None if Abacus is down."""
+    try:
+        r = requests.get(f"{ABACUS_BASE}/get/{ABACUS_NS}/{counter}", timeout=4)
+        if r.status_code == 404:
+            return 0
+        r.raise_for_status()
+        return int(r.json().get("value", 0))
+    except Exception:
+        return None
+
+
+def _fire_and_forget(fn, *args):
+    threading.Thread(target=fn, args=args, daemon=True).start()
+
+
+def count_visit():
+    _fire_and_forget(_abacus_hit, "visits")
+
+
+def count_download(platform, title):
+    now = pkt_now()
+    with RECENT_LOCK:
+        RECENT_DOWNLOADS.appendleft({
+            "time": now.strftime("%Y-%m-%d %H:%M"),
+            "platform": platform,
+            "title": (title or "")[:120],
+        })
+    day = now.strftime("%Y-%m-%d")
+
+    def _hits():
+        _abacus_hit("total")
+        _abacus_hit(f"p-{platform}")
+        _abacus_hit(f"d-{day}")
+
+    _fire_and_forget(_hits)
+
+
+def _admin_ok():
+    key = os.environ.get("ADMIN_KEY", "")
+    if not key:
+        return False
+    return secrets.compare_digest(request.args.get("key", ""), key)
+
+
+ADMIN_HTML = """<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lona Downloader — Stats</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { background:#000; color:#fff; font-family:"Helvetica Neue", Helvetica, Arial, sans-serif;
+         padding:28px 18px 48px; }
+  .wrap { max-width:560px; margin:0 auto; }
+  h1 { font-family:Georgia, "Times New Roman", serif; font-weight:400; text-align:center;
+       font-size:26px; letter-spacing:8px; color:#e9c766; }
+  .sub { text-align:center; color:#9a9a9a; font-size:13px; letter-spacing:3px; margin:8px 0 26px; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:26px; }
+  .card { background:#0d0d0d; border:1px solid #2c2c2c; border-radius:16px; padding:20px 16px; }
+  .card .num { font-size:42px; font-weight:200; color:#e9c766; line-height:1.1; }
+  .card .lbl { color:#9a9a9a; font-size:12.5px; letter-spacing:1.5px; margin-top:6px; }
+  h2 { font-size:14px; font-weight:400; letter-spacing:3px; color:#e9c766; margin:0 0 14px; }
+  .prow { display:flex; align-items:center; gap:12px; margin-bottom:11px; }
+  .prow .name { width:92px; flex:none; font-size:14px; color:#e8e8e8; }
+  .prow .track { flex:1; height:10px; background:#1d1d1d; border-radius:5px; overflow:hidden; }
+  .prow .bar { height:100%; background:linear-gradient(90deg, #a97f27, #e9c766); border-radius:5px; }
+  .prow .val { width:52px; flex:none; text-align:right; font-size:14px; color:#e9c766; }
+  .panel { background:#0d0d0d; border:1px solid #2c2c2c; border-radius:16px; padding:22px 18px;
+           margin-bottom:26px; }
+  .ritem { padding:9px 0; border-bottom:1px solid #1d1d1d; font-size:14px; }
+  .ritem:last-child { border-bottom:none; }
+  .ritem .when { color:#9a9a9a; font-size:12.5px; }
+  .ritem .plat { color:#e9c766; }
+  .muted { color:#9a9a9a; font-size:12.5px; }
+  .err { color:#ff8a80; text-align:center; margin-bottom:18px; display:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>LONA</h1>
+  <div class="sub">DOWNLOADER &mdash; OWNER STATISTICS</div>
+  <div class="err" id="err">Could not load the counters &mdash; showing what we have.</div>
+  <div class="grid">
+    <div class="card"><div class="num" id="total">&mdash;</div><div class="lbl">TOTAL DOWNLOADS</div></div>
+    <div class="card"><div class="num" id="today">&mdash;</div><div class="lbl">TODAY (PKT)</div></div>
+    <div class="card"><div class="num" id="last7">&mdash;</div><div class="lbl">LAST 7 DAYS</div></div>
+    <div class="card"><div class="num" id="visits">&mdash;</div><div class="lbl">VISITS</div></div>
+  </div>
+  <div class="panel">
+    <h2>BY PLATFORM</h2>
+    <div id="platforms"></div>
+  </div>
+  <div class="panel">
+    <h2>RECENT DOWNLOADS</h2>
+    <div class="muted" style="margin-bottom:8px">(since server restart)</div>
+    <div id="recent"></div>
+  </div>
+</div>
+<script>
+  var NAMES = {tiktok:"TikTok", youtube:"YouTube", instagram:"Instagram", pinterest:"Pinterest",
+               x:"X", facebook:"Facebook", reddit:"Reddit", soundcloud:"SoundCloud"};
+  var ORDER = ["tiktok","youtube","instagram","pinterest","x","facebook","reddit","soundcloud"];
+  function esc(s) { var d = document.createElement("div"); d.textContent = s || ""; return d.innerHTML; }
+  function show(id, v) { document.getElementById(id).textContent = (v === null || v === undefined) ? "\\u2014" : v; }
+  var key = new URLSearchParams(location.search).get("key") || "";
+  fetch("/admin/data?key=" + encodeURIComponent(key))
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      show("total", d.total); show("today", d.today); show("last7", d.last7); show("visits", d.visits);
+      var max = 0;
+      ORDER.forEach(function (p) { var v = (d.platforms || {})[p]; if (v && v > max) max = v; });
+      var html = "";
+      ORDER.forEach(function (p) {
+        var v = (d.platforms || {})[p];
+        var pct = (v && max) ? Math.max(2, Math.round(v / max * 100)) : 0;
+        html += '<div class="prow"><div class="name">' + NAMES[p] + '</div>' +
+                '<div class="track"><div class="bar" style="width:' + pct + '%"></div></div>' +
+                '<div class="val">' + ((v === null || v === undefined) ? "\\u2014" : v) + '</div></div>';
+      });
+      document.getElementById("platforms").innerHTML = html;
+      var rec = d.recent || [];
+      document.getElementById("recent").innerHTML = rec.length ? rec.map(function (e) {
+        return '<div class="ritem"><span class="when">' + esc(e.time) + ' PKT</span><br>' +
+               '<span class="plat">' + esc(NAMES[e.platform] || e.platform) + '</span> &mdash; ' + esc(e.title) + '</div>';
+      }).join("") : '<div class="muted">No downloads yet since this server started.</div>';
+    })
+    .catch(function () { document.getElementById("err").style.display = "block"; });
+</script>
+</body>
+</html>
+"""
 
 
 def detect_platform(url):
@@ -516,6 +681,7 @@ def ytdlp_download_to_dir(source, fmt, platform, tmpdir):
 
 @app.route("/")
 def index():
+    count_visit()
     return send_file(INDEX_HTML)
 
 
@@ -569,6 +735,7 @@ def api_download():
         resp_headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
         if r.headers.get("Content-Length"):
             resp_headers["Content-Length"] = r.headers["Content-Length"]
+        count_download(platform, job.get("title") or filename)
         return Response(
             stream_with_context(r.iter_content(256 * 1024)),
             content_type=r.headers.get("Content-Type") or mime,
@@ -604,7 +771,49 @@ def api_download():
     resp = send_file(path, as_attachment=True, download_name=filename,
                      mimetype=EXT_MIME.get(path.suffix.lstrip(".").lower(), mime))
     resp.call_on_close(lambda: shutil.rmtree(tmpdir, ignore_errors=True))
+    count_download(platform, job.get("title") or filename)
     return resp
+
+
+@app.route("/admin")
+def admin_page():
+    if not _admin_ok():
+        return ("", 404)
+    return Response(ADMIN_HTML, mimetype="text/html")
+
+
+@app.route("/admin/data")
+def admin_data():
+    if not _admin_ok():
+        return jsonify(ok=False), 404
+    days = [(pkt_now() - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(7)]
+    wanted = (["visits", "total"] + [f"p-{p}" for p in ADMIN_PLATFORMS]
+              + [f"d-{d}" for d in days])
+    values = {}
+
+    def _fetch(counter):
+        values[counter] = _abacus_get(counter)
+
+    threads = [threading.Thread(target=_fetch, args=(c,), daemon=True)
+               for c in wanted]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=6)
+
+    day_vals = [values.get(f"d-{d}") for d in days]
+    last7 = None if all(v is None for v in day_vals) else sum(v or 0 for v in day_vals)
+    with RECENT_LOCK:
+        recent = list(RECENT_DOWNLOADS)
+    return jsonify(
+        ok=True,
+        visits=values.get("visits"),
+        total=values.get("total"),
+        today=values.get(f"d-{days[0]}"),
+        last7=last7,
+        platforms={p: values.get(f"p-{p}") for p in ADMIN_PLATFORMS},
+        recent=recent,
+    )
 
 
 if __name__ == "__main__":
