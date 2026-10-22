@@ -704,9 +704,10 @@ def robots_txt():
 
 @app.route("/sitemap.xml")
 def sitemap_xml():
-    pages = [
-        ("https://lona-downloader.onrender.com/", "2026-10-22", "1.0"),
-        ("https://lona-downloader.onrender.com/pinterest-video-downloader", "2026-10-22", "0.9"),
+    pages = [("https://lona-downloader.onrender.com/", "2026-10-22", "1.0")]
+    pages += [
+        (f"https://lona-downloader.onrender.com/{s}", "2026-10-22", "0.9")
+        for s in SEO_SLUGS
     ]
     items = "".join(
         f"<url><loc>{u}</loc><lastmod>{d}</lastmod><priority>{p}</priority></url>"
@@ -721,13 +722,25 @@ def sitemap_xml():
     return Response(body, mimetype="application/xml")
 
 
-@app.route("/pinterest-video-downloader")
-def pinterest_video_downloader():
-    p = BASE / "pinterest-video-downloader.html"
+SEO_SLUGS = [
+    "pinterest-video-downloader",
+    "tiktok-video-downloader",
+]
+
+
+def _seo_page(slug):
+    p = BASE / f"{slug}.html"
     if p.exists():
         count_visit()
         return send_file(p)
     return ("", 404)
+
+
+for _slug in SEO_SLUGS:
+    app.add_url_rule(
+        f"/{_slug}", endpoint=f"seo_{_slug}",
+        view_func=(lambda s: lambda: _seo_page(s))(_slug),
+    )
 
 
 @app.route("/og-image.png")
