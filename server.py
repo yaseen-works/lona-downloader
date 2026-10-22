@@ -727,6 +727,11 @@ SEO_SLUGS = [
     "tiktok-video-downloader",
     "instagram-reel-downloader",
     "instagram-photo-downloader",
+    "facebook-video-downloader",
+    "reddit-video-downloader",
+    "twitter-video-downloader",
+    "soundcloud-downloader",
+    "youtube-video-downloader",
 ]
 
 
