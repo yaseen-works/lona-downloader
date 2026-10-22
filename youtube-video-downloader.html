@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>YouTube Video Downloader — Download YouTube Videos Free in HD | Lona Downloader</title>
+<meta name="description" content="Free YouTube video downloader by Lona: save YouTube videos and Shorts in the best available quality. Copy the video link, tap one golden circle — no sign-up.">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://lona-downloader.onrender.com/youtube-video-downloader">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Lona Downloader">
+<meta property="og:title" content="YouTube Video Downloader — Free | Lona Downloader">
+<meta property="og:description" content="Free YouTube video downloader by Lona: save YouTube videos and Shorts in the best available quality. Copy the video link, tap one golden circle — no sign-up.">
+<meta property="og:url" content="https://lona-downloader.onrender.com/youtube-video-downloader">
+<meta property="og:image" content="https://lona-downloader.onrender.com/og-image.png">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">
+{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Is this YouTube downloader free?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Lona Downloader is free to use, with no sign-up and no limit on how many videos you save."}}, {"@type": "Question", "name": "Can I download YouTube Shorts?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Copy a Shorts link the same way \u2014 it saves as a normal MP4 video file."}}, {"@type": "Question", "name": "What quality are videos downloaded in?", "acceptedAnswer": {"@type": "Answer", "text": "The best quality YouTube makes available for that video. Most videos download in HD."}}, {"@type": "Question", "name": "Can I download private or age-restricted videos?", "acceptedAnswer": {"@type": "Answer", "text": "No. Only public videos can be downloaded."}}, {"@type": "Question", "name": "Where does the downloaded video go?", "acceptedAnswer": {"@type": "Answer", "text": "It is saved in Lona's VIDEOS library. Tap the Download button on it to put the file on your device; in the Lona Android app, downloads go straight to your gallery."}}]}
+</script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html, body { height:100%; }
+  body {
+    background:#000; color:#fff;
+    font-family:"Helvetica Neue", Helvetica, Arial, sans-serif;
+    overflow:hidden; user-select:none; -webkit-user-select:none;
+  }
+  .screen { position:fixed; inset:0; display:none; flex-direction:column; }
+  .screen.active { display:flex; }
+
+  /* ---------- home ---------- */
+  .corner {
+    position:absolute; top:calc(18px + env(safe-area-inset-top)); width:44px; height:44px;
+    border:2px solid rgba(255,255,255,.75); border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-weight:300; color:#fff; background:transparent; cursor:pointer; z-index:5;
+  }
+  #infoBtn { left:20px; font-size:24px; font-style:italic; font-family:Georgia, serif; }
+  #adsBtn  { right:20px; font-size:11px; letter-spacing:.5px; overflow:hidden; }
+  #adsBtn::after {
+    content:""; position:absolute; left:3px; right:3px; top:50%; height:2px;
+    background:rgba(255,255,255,.85); transform:rotate(-38deg);
+  }
+  .brand { margin-top:calc(84px + env(safe-area-inset-top)); text-align:center; }
+  .brand-name {
+    font-family:Georgia, "Times New Roman", serif; font-size:28px; font-weight:400;
+    letter-spacing:6px; text-indent:6px; line-height:1.05;
+    background:linear-gradient(180deg, #f9e7a0 0%, #e9c766 38%, #a97f27 62%, #f3d67c 100%);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+    filter:drop-shadow(0 0 14px rgba(222, 184, 84, .35));
+  }
+  .brand-sub {
+    margin-top:8px; display:flex; align-items:center; justify-content:center; gap:14px;
+  }
+  .brand-sub .line {
+    width:46px; height:1px;
+    background:linear-gradient(90deg, transparent, #c9a24a);
+  }
+  .brand-sub .line:last-child { background:linear-gradient(90deg, #c9a24a, transparent); }
+  .brand-sub .word {
+    font-family:Georgia, "Times New Roman", serif; font-size:13px; letter-spacing:7px; text-indent:7px;
+    color:#dcbc63; text-shadow:0 0 10px rgba(220, 188, 99, .35);
+  }
+  .sphere-wrap { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+  #sphere {
+    position:relative;
+    width:min(62vw, 270px); height:min(62vw, 270px); border-radius:50%;
+    background:radial-gradient(circle at 50% 38%, #33302a 0%, #201d18 42%, #100e0b 72%, #050505 100%);
+    border:2px solid rgba(222, 184, 84, .9);
+    box-shadow:0 0 0 1px rgba(0,0,0,.9), inset 0 0 42px rgba(0,0,0,.85), 0 0 34px rgba(212, 175, 55, .30);
+    cursor:pointer; outline:none;
+  }
+  #sphere::before, #sphere::after {
+    content:""; position:absolute; left:50%; width:54px; height:14px; transform:translateX(-50%);
+    border-radius:50%; background:radial-gradient(ellipse at center, rgba(255, 226, 140, .95), rgba(255, 226, 140, 0) 70%);
+    pointer-events:none;
+  }
+  #sphere::before { top:-8px; }
+  #sphere::after { bottom:-8px; }
+  #sphere.busy { animation:pulse 1.6s ease-in-out infinite; }
+  #sphere.shiver { animation:pulse 1.6s ease-in-out infinite, shiver .12s linear infinite; }
+  @keyframes pulse { 0%,100%{ transform:scale(1);} 50%{ transform:scale(1.025);} }
+  @keyframes shiver { 0%{ margin-left:0;} 25%{ margin-left:.6px;} 75%{ margin-left:-.6px;} 100%{ margin-left:0;} }
+  #status {
+    margin-top:34px; min-height:22px; font-size:16px; font-weight:300; letter-spacing:.4px;
+    color:#e8e8e8; text-align:center; padding:0 24px; visibility:hidden;
+  }
+  #status.show { visibility:visible; }
+  #status.error { color:#ff8a80; }
+  .videos-entry {
+    margin-bottom:calc(30px + env(safe-area-inset-bottom)); align-self:center;
+    background:none; border:none; cursor:pointer; text-align:center; color:#e8a33d;
+  }
+  .dots { width:64px; height:64px; margin:0 auto 8px; position:relative; }
+  .dots i { position:absolute; border-radius:50%; background:#e8a33d; }
+  .videos-entry span {
+    display:block; font-size:15px; font-weight:100; letter-spacing:7px; text-indent:7px; color:#dcbc63;
+  }
+
+  /* ---------- overlays ---------- */
+  .overlay {
+    position:fixed; inset:0; background:rgba(0,0,0,.88); display:none;
+    align-items:center; justify-content:center; z-index:20; padding:22px;
+  }
+  .overlay.open { display:flex; }
+  .panel {
+    background:#0d0d0d; border:1px solid #2c2c2c; border-radius:16px; max-width:420px; width:100%;
+    padding:26px 24px; max-height:82vh; overflow:auto;
+  }
+  .panel h2 { font-weight:200; letter-spacing:3px; font-size:17px; margin-bottom:14px; }
+  .panel p { font-size:14.5px; line-height:1.55; color:#cfcfcf; font-weight:300; }
+  .panel ul { margin:12px 0 4px 18px; color:#cfcfcf; font-size:14.5px; line-height:1.7; font-weight:300; }
+  .panel .close {
+    margin-top:20px; width:100%; padding:12px; background:#1b1b1b; color:#fff; border:1px solid #333;
+    border-radius:10px; font-size:15px; letter-spacing:1px; cursor:pointer;
+  }
+
+  /* ---------- library ---------- */
+  #libraryScreen { background:#000; }
+  .lib-head {
+    display:flex; align-items:center; gap:14px;
+    padding:calc(16px + env(safe-area-inset-top)) 18px 12px;
+  }
+  .back {
+    background:none; border:1px solid #333; color:#fff; border-radius:50%;
+    width:40px; height:40px; font-size:19px; cursor:pointer; flex:none;
+  }
+  .lib-head h2 { font-weight:100; letter-spacing:6px; font-size:19px; }
+  #libList { flex:1; overflow-y:auto; padding:8px 16px calc(24px + env(safe-area-inset-bottom)); }
+  .empty { color:#8a8a8a; text-align:center; margin-top:70px; font-weight:300; line-height:1.6; }
+  .item {
+    display:flex; gap:13px; padding:13px 0; border-bottom:1px solid #1d1d1d; align-items:center;
+  }
+  .item img { width:56px; height:74px; object-fit:cover; border-radius:8px; background:#161616; flex:none; }
+  .item .meta { flex:1; min-width:0; }
+  .item .t { font-size:14.5px; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .item .d { font-size:12.5px; color:#9a9a9a; margin-top:4px; font-weight:300; }
+  .item .acts { display:flex; flex-direction:column; gap:7px; flex:none; }
+  .item button {
+    padding:8px 13px; border-radius:8px; border:1px solid #333; background:#161616; color:#fff;
+    font-size:13px; cursor:pointer;
+  }
+  .item button.dl { background:#e8a33d; border-color:#e8a33d; color:#111; font-weight:600; }
+</style>
+
+<style>
+  html, body { height:auto !important; overflow-y:auto !important; }
+  #homeScreen { position:relative !important; height:100dvh; }
+  #seoContent { background:#000; color:#e8e8e8; font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;
+    max-width:760px; margin:0 auto; padding:44px 22px 60px; line-height:1.65; }
+  #seoContent h1 { font-family:Georgia,"Times New Roman",serif; font-weight:400; color:#f3d67c;
+    font-size:34px; letter-spacing:.5px; margin-bottom:14px; }
+  #seoContent h2 { color:#f3d67c; font-size:23px; font-weight:600; margin:34px 0 10px; }
+  #seoContent p, #seoContent li { font-size:16.5px; color:#d9d9d9; }
+  #seoContent ol, #seoContent ul { padding-left:22px; margin:8px 0; }
+  #seoContent li { margin:7px 0; }
+  #seoContent .faq p { margin:4px 0 14px; }
+  #seoContent a { color:#f3d67c; }
+  #seoContent .fineprint { font-size:13.5px; color:#8a8a8a; margin-top:36px; }
+  #seoContent .up { display:block; text-align:center; margin-top:26px; font-size:15px; }
+</style>
+</head>
+<body>
+
+<!-- ================= HOME ================= -->
+<div class="screen active" id="homeScreen">
+  <button class="corner" id="infoBtn" aria-label="Info">i</button>
+  <button class="corner" id="adsBtn" aria-label="Remove ads">ADS</button>
+  <div class="brand">
+    <div class="brand-name">LONA</div>
+    <div class="brand-sub"><span class="line"></span><span class="word">DOWNLOADER</span><span class="line"></span></div>
+  </div>
+  <div class="sphere-wrap">
+    <div id="sphere" role="button" aria-label="Download"></div>
+    <div id="status"></div>
+  </div>
+  <button class="videos-entry" id="videosBtn">
+    <div class="dots" id="dotsLogo"></div>
+    <span>VIDEOS</span>
+  </button>
+</div>
+
+<!-- ================= LIBRARY ================= -->
+<div class="screen" id="libraryScreen">
+  <div class="lib-head">
+    <button class="back" id="backBtn" aria-label="Back">‹</button>
+    <h2>VIDEOS</h2>
+  </div>
+  <div id="libList"></div>
+</div>
+
+<!-- ================= INFO ================= -->
+<div class="overlay" id="infoOverlay">
+  <div class="panel">
+    <h2>HOW IT WORKS</h2>
+    <p>Copy a link first, then tap the circle. Lona Downloader fetches the video for you — no watermark where the platform allows it.</p>
+    <p style="margin-top:12px">Supported platforms:</p>
+    <ul>
+      <li>TikTok — HD, no watermark</li>
+      <li>YouTube</li>
+      <li>Instagram — posts &amp; reels</li>
+      <li>Pinterest — video pins</li>
+      <li>X (Twitter)</li>
+      <li>Facebook — public videos</li>
+      <li>Reddit — video posts</li>
+      <li>SoundCloud — audio</li>
+      <li>Vimeo</li>
+      <li>Dailymotion</li>
+    </ul>
+    <p style="margin-top:12px">Only public links work. Private or deleted posts can't be fetched.</p>
+    <button class="close" data-close="infoOverlay">Close</button>
+  </div>
+</div>
+
+<!-- ================= PRO ================= -->
+<div class="overlay" id="proOverlay">
+  <div class="panel">
+    <h2>LONA PRO</h2>
+    <p>Pro is coming soon.</p>
+    <button class="close" data-close="proOverlay">Close</button>
+  </div>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var sphere = document.getElementById('sphere'),
+      statusEl = document.getElementById('status'),
+      busy = false, pulseTimer = null;
+
+  /* dotted VIDEOS logo (matches the reference app's gold dot cluster) */
+  (function buildDots() {
+    var host = document.getElementById('dotsLogo'),
+        rows = [[26], [14, 26, 38], [8, 20, 32, 44], [14, 26, 38], [26]],
+        sizes = [7, 8, 9];
+    rows.forEach(function (row, ri) {
+      row.forEach(function (x, ci) {
+        var d = document.createElement('i'),
+            s = sizes[(ri + ci) % sizes.length];
+        d.style.width = d.style.height = s + 'px';
+        d.style.left = (x + 6) + 'px';
+        d.style.top = (ri * 13 + 4) + 'px';
+        host.appendChild(d);
+      });
+    });
+  })();
+
+  function vibrate(p) { try { if (navigator.vibrate) navigator.vibrate(p); } catch (e) {} }
+  function startPulse() { stopPulse(); pulseTimer = setInterval(function () { vibrate(30); }, 1200); }
+  function stopPulse() { if (pulseTimer) { clearInterval(pulseTimer); pulseTimer = null; } try { if (navigator.vibrate) navigator.vibrate(0); } catch (e) {} }
+
+  function setStatus(text, isError) {
+    if (!text) { statusEl.className = ''; statusEl.textContent = ''; return; }
+    statusEl.textContent = text;
+    statusEl.className = 'show' + (isError ? ' error' : '');
+  }
+
+  function extractUrl(text) {
+    if (!text) return null;
+    var m = String(text).match(/https?:\/\/[^\s<>"']+/i);
+    return m ? m[0].replace(/[),.;!?]+$/, '') : null;
+  }
+
+  /* ---------- library (localStorage) ---------- */
+  var LIB_KEY = 'lona_library_v1';
+  function loadLib() { try { return JSON.parse(localStorage.getItem(LIB_KEY) || '[]'); } catch (e) { return []; } }
+  function saveLib(items) { try { localStorage.setItem(LIB_KEY, JSON.stringify(items.slice(0, 100))); } catch (e) {} }
+  function addToLib(item) {
+    var items = loadLib();
+    items = items.filter(function (x) { return x.sourceUrl !== item.sourceUrl; });
+    items.unshift(item); saveLib(items);
+  }
+  function renderLib() {
+    var list = document.getElementById('libList'), items = loadLib();
+    if (!items.length) {
+      list.innerHTML = '<div class="empty">No downloads yet.<br>Copy a link and tap the circle.</div>';
+      return;
+    }
+    list.innerHTML = '';
+    items.forEach(function (item) {
+      var row = document.createElement('div'); row.className = 'item';
+      var img = document.createElement('img'); img.alt = ''; if (item.thumbnail) img.src = item.thumbnail;
+      var meta = document.createElement('div'); meta.className = 'meta';
+      var t = document.createElement('div'); t.className = 't'; t.textContent = item.title || 'Video';
+      var d = document.createElement('div'); d.className = 'd';
+      d.textContent = (item.platform || '') + ' · ' + (item.date || '');
+      meta.appendChild(t); meta.appendChild(d);
+      var acts = document.createElement('div'); acts.className = 'acts';
+      var dl = document.createElement('button'); dl.className = 'dl'; dl.textContent = 'Download';
+      dl.onclick = function () { downloadFromLib(item, dl); };
+      var rm = document.createElement('button'); rm.textContent = 'Remove';
+      rm.onclick = function () {
+        saveLib(loadLib().filter(function (x) { return x.sourceUrl !== item.sourceUrl; }));
+        renderLib();
+      };
+      acts.appendChild(dl); acts.appendChild(rm);
+      row.appendChild(img); row.appendChild(meta); row.appendChild(acts);
+      list.appendChild(row);
+    });
+  }
+
+  function saveBlob(blob, filename) {
+    filename = filename || 'lona-video.mp4';
+    // Inside the Lona Android app: hand the file to the app so it lands straight in the gallery.
+    if (window.LonaAndroid && window.LonaAndroid.saveBase64) {
+      var r = new FileReader();
+      r.onload = function () { window.LonaAndroid.saveBase64(r.result, filename); };
+      r.readAsDataURL(blob);
+      return;
+    }
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a); a.click();
+    setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
+  }
+
+  function fetchFile(token) {
+    return fetch('/api/download?token=' + encodeURIComponent(token)).then(function (r) {
+      if (!r.ok) throw new Error('download failed');
+      var cd = r.headers.get('Content-Disposition') || '', name = 'lona-video.mp4', m = /filename="([^"]+)"/.exec(cd);
+      if (m) name = m[1];
+      return r.blob().then(function (b) { return { blob: b, name: name }; });
+    });
+  }
+
+  function resolve(url) {
+    return fetch('/api/resolve', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: url })
+    }).then(function (r) { return r.json(); });
+  }
+
+  function downloadFromLib(item, btn) {
+    if (busy) return;
+    var old = btn.textContent; btn.textContent = 'Fetching…'; btn.disabled = true;
+    resolve(item.sourceUrl).then(function (res) {
+      if (!res.ok) throw new Error(res.error || 'failed');
+      btn.textContent = 'Downloading…';
+      return fetchFile(res.token);
+    }).then(function (f) {
+      saveBlob(f.blob, f.name); btn.textContent = old; btn.disabled = false;
+    }).catch(function () {
+      btn.textContent = 'Failed — retry'; btn.disabled = false;
+      setTimeout(function () { btn.textContent = old; }, 2200);
+    });
+  }
+
+  /* ---------- main tap flow ---------- */
+  function onSphereTap() {
+    if (busy) return;
+    vibrate(40);
+    var clipPromise;
+    if (navigator.clipboard && navigator.clipboard.readText) {
+      clipPromise = navigator.clipboard.readText().catch(function () { return ''; });
+    } else {
+      clipPromise = Promise.resolve('');
+    }
+    clipPromise.then(function (text) {
+      var url = extractUrl(text);
+      if (!url) { setStatus('Copy a link first, then tap the circle', true); return; }
+      busy = true;
+      sphere.classList.add('busy', 'shiver');
+      setStatus('Fetching link…', false);
+      startPulse();
+      resolve(url).then(function (res) {
+        if (!res.ok) throw new Error(res.error || 'Could not fetch that link.');
+        setStatus('Downloading…', false);
+        return fetchFile(res.token).then(function (f) { return { f: f, res: res, url: url }; });
+      }).then(function (out) {
+        saveBlob(out.f.blob, out.f.name);
+        stopPulse(); vibrate(120);
+        setStatus('Download complete', false);
+        addToLib({
+          platform: out.res.platform, title: out.res.title,
+          thumbnail: out.res.thumbnail, sourceUrl: url,
+          date: new Date().toLocaleDateString()
+        });
+      }).catch(function (err) {
+        stopPulse();
+        setStatus(err.message || 'Something went wrong — please try again.', true);
+      }).then(function () {
+        busy = false;
+        sphere.classList.remove('busy', 'shiver');
+      });
+    });
+  }
+  sphere.addEventListener('click', onSphereTap);
+
+  /* ---------- navigation & overlays ---------- */
+  function show(id) {
+    document.querySelectorAll('.screen').forEach(function (s) { s.classList.remove('active'); });
+    document.getElementById(id).classList.add('active');
+  }
+  document.getElementById('videosBtn').addEventListener('click', function () { renderLib(); show('libraryScreen'); });
+  document.getElementById('backBtn').addEventListener('click', function () { show('homeScreen'); });
+  document.getElementById('infoBtn').addEventListener('click', function () { document.getElementById('infoOverlay').classList.add('open'); });
+  document.getElementById('adsBtn').addEventListener('click', function () { document.getElementById('proOverlay').classList.add('open'); });
+  document.querySelectorAll('[data-close]').forEach(function (b) {
+    b.addEventListener('click', function () { document.getElementById(b.getAttribute('data-close')).classList.remove('open'); });
+  });
+  document.querySelectorAll('.overlay').forEach(function (ov) {
+    ov.addEventListener('click', function (e) { if (e.target === ov) ov.classList.remove('open'); });
+  });
+})();
+</script>
+
+<main id="seoContent">
+  <h1>YouTube Video Downloader</h1>
+  <p>YouTube's own download button locks videos inside the app, behind a Premium subscription. Lona Downloader saves public YouTube videos and Shorts as real files, in the best quality available. Copy the video's link, open this page and tap the golden circle — the video is saved inside Lona, ready to download to your phone or computer. No YouTube login, no sign-up, no app to install — and it is completely free.</p>
+  <h2>How to download a YouTube video</h2>
+  <ol>
+<li><strong>Copy the video link.</strong> Open the video in YouTube, tap Share and choose “Copy link”. youtu.be short links and Shorts links work too.</li>
+<li><strong>Tap the golden circle.</strong> Come back to this page and tap the big golden circle. Lona reads the link you copied automatically — nothing to paste, no buttons to hunt for.</li>
+<li><strong>Save your video.</strong> The video appears in the VIDEOS library. Tap its Download button to save it to your device — in the Lona Android app it lands straight in your gallery.</li>
+  </ol>
+  <h2>Why use Lona as your YouTube downloader</h2>
+  <ul>
+<li>Videos and Shorts — both save as regular video files</li>
+<li>Best available quality — Lona always picks the highest version YouTube offers</li>
+<li>youtu.be short links supported</li>
+<li>No YouTube login, no Premium needed</li>
+<li>Free and unlimited — no daily caps, no premium wall</li>
+<li>No sign-up, nothing to install — works right in your browser</li>
+<li>Works on Android, iPhone and PC</li>
+<li>One tool for everything — also TikTok, Instagram, Facebook, Pinterest, X, Reddit and SoundCloud</li>
+  </ul>
+  <h2>Frequently asked questions</h2>
+  <div class="faq">
+<h3>Is this YouTube downloader free?</h3><p>Yes. Lona Downloader is free to use, with no sign-up and no limit on how many videos you save.</p>
+<h3>Can I download YouTube Shorts?</h3><p>Yes. Copy a Shorts link the same way — it saves as a normal MP4 video file.</p>
+<h3>What quality are videos downloaded in?</h3><p>The best quality YouTube makes available for that video. Most videos download in HD.</p>
+<h3>Can I download private or age-restricted videos?</h3><p>No. Only public videos can be downloaded.</p>
+<h3>Where does the downloaded video go?</h3><p>It is saved in Lona's VIDEOS library. Tap the Download button on it to put the file on your device; in the Lona Android app, downloads go straight to your gallery.</p>
+  </div>
+  <h2>More downloaders from Lona</h2>
+  <p>Lona is one downloader for every platform — all from the same golden circle: <a href="/">Lona Downloader home (all platforms)</a> · <a href="/tiktok-video-downloader">TikTok Video Downloader</a> · <a href="/instagram-reel-downloader">Instagram Reel Downloader</a> · <a href="/instagram-photo-downloader">Instagram Photo Downloader</a> · <a href="/pinterest-video-downloader">Pinterest Video Downloader</a> · <a href="/facebook-video-downloader">Facebook Video Downloader</a> · <a href="/reddit-video-downloader">Reddit Video Downloader</a> · <a href="/twitter-video-downloader">X (Twitter) Video Downloader</a> · <a href="/soundcloud-downloader">SoundCloud Downloader</a></p>
+  <a class="up" href="#homeScreen">↑ Back to the downloader</a>
+  <p class="fineprint">Lona Downloader is not affiliated with YouTube or Google LLC. Please download only content you own or have permission to save, and credit the original creator when you share.</p>
+</main>
+</body>
+</html>
