@@ -725,6 +725,8 @@ def sitemap_xml():
 SEO_SLUGS = [
     "pinterest-video-downloader",
     "tiktok-video-downloader",
+    "instagram-reel-downloader",
+    "instagram-photo-downloader",
 ]
 
 
