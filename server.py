@@ -706,6 +706,7 @@ def robots_txt():
 def sitemap_xml():
     pages = [
         ("https://lona-downloader.onrender.com/", "2026-10-22", "1.0"),
+        ("https://lona-downloader.onrender.com/pinterest-video-downloader", "2026-10-22", "0.9"),
     ]
     items = "".join(
         f"<url><loc>{u}</loc><lastmod>{d}</lastmod><priority>{p}</priority></url>"
@@ -718,6 +719,15 @@ def sitemap_xml():
         + "</urlset>"
     )
     return Response(body, mimetype="application/xml")
+
+
+@app.route("/pinterest-video-downloader")
+def pinterest_video_downloader():
+    p = BASE / "pinterest-video-downloader.html"
+    if p.exists():
+        count_visit()
+        return send_file(p)
+    return ("", 404)
 
 
 @app.route("/og-image.png")
