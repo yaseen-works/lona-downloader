@@ -690,6 +690,44 @@ def favicon():
     return ("", 204)
 
 
+@app.route("/robots.txt")
+def robots_txt():
+    body = (
+        "User-agent: *\n"
+        "Allow: /\n"
+        "Disallow: /admin\n"
+        "\n"
+        "Sitemap: https://lona-downloader.onrender.com/sitemap.xml\n"
+    )
+    return Response(body, mimetype="text/plain")
+
+
+@app.route("/sitemap.xml")
+def sitemap_xml():
+    pages = [
+        ("https://lona-downloader.onrender.com/", "2026-10-22", "1.0"),
+    ]
+    items = "".join(
+        f"<url><loc>{u}</loc><lastmod>{d}</lastmod><priority>{p}</priority></url>"
+        for u, d, p in pages
+    )
+    body = (
+        '<?xml version="1.0" encoding="UTF-8"?>'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
+        + items
+        + "</urlset>"
+    )
+    return Response(body, mimetype="application/xml")
+
+
+@app.route("/og-image.png")
+def og_image():
+    p = BASE / "og-image.png"
+    if p.exists():
+        return send_file(p, mimetype="image/png")
+    return ("", 404)
+
+
 @app.route("/api/resolve", methods=["POST"])
 def api_resolve():
     body = request.get_json(silent=True) or {}
