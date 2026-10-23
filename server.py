@@ -963,6 +963,14 @@ def download_app():
                          mimetype="application/vnd.android.package-archive")
     return ("", 404)
 
+@app.route("/download-plus")
+def download_plus():
+    p = BASE / "LonaPlus.apk"
+    if p.exists():
+        return send_file(p, as_attachment=True,
+                         download_name="LonaPlus.apk",
+                         mimetype="application/vnd.android.package-archive")
+    return ("Lona Plus is not available right now.", 404)
 
 @app.route("/og-image.png")
 def og_image():
