@@ -61,8 +61,11 @@ app = Flask(__name__)
 TOKENS = {}
 TOKENS_LOCK = threading.Lock()
 
-GENERIC_ERR = "Could not fetch that link — it may be private, deleted, or the platform is blocking it right now."
-INSTAGRAM_ERR = "Instagram link nahi khula — private ya ghalat link ho sakta hai"
+GENERIC_ERR = "Could not fetch that link. It may be private or deleted — or the platform is busy right now. Check the link and try again in a minute."
+INSTAGRAM_ERR = "Instagram link nahi khula — ye private ho sakta hai, ya link ghalat hai. Public link try karo."
+INSTAGRAM_LIMIT_ERR = "Instagram ki aaj ki free limit khatam ho gayi hai — kal phir try karo. Baaki platforms chal rahe hain."
+YOUTUBE_ERR = "YouTube is blocking our server right now — please try again in a little while."
+SNAPCHAT_ERR = "That Snapchat link could not be fetched. Only public Spotlight videos and public stories work."
 
 
 def prune_tokens():
@@ -95,7 +98,7 @@ RECENT_DOWNLOADS = deque(maxlen=20)
 RECENT_LOCK = threading.Lock()
 
 ADMIN_PLATFORMS = ["tiktok", "youtube", "instagram", "pinterest",
-                   "x", "facebook", "reddit", "soundcloud"]
+                   "x", "facebook", "reddit", "soundcloud", "snapchat"]
 
 
 def pkt_now():
@@ -127,6 +130,18 @@ def _fire_and_forget(fn, *args):
 
 def count_visit():
     _fire_and_forget(_abacus_hit, "visits")
+
+
+def count_failure(platform):
+    def _hits():
+        _abacus_hit("fails")
+        _abacus_hit(f"f-{platform}")
+    _fire_and_forget(_hits)
+
+
+def count_ig_call():
+    month = pkt_now().strftime("%Y-%m")
+    _fire_and_forget(_abacus_hit, f"ig-{month}")
 
 
 def count_download(platform, title):
@@ -211,8 +226,8 @@ ADMIN_HTML = """<!DOCTYPE html>
 </div>
 <script>
   var NAMES = {tiktok:"TikTok", youtube:"YouTube", instagram:"Instagram", pinterest:"Pinterest",
-               x:"X", facebook:"Facebook", reddit:"Reddit", soundcloud:"SoundCloud"};
-  var ORDER = ["tiktok","youtube","instagram","pinterest","x","facebook","reddit","soundcloud"];
+               x:"X", facebook:"Facebook", reddit:"Reddit", soundcloud:"SoundCloud", snapchat:"Snapchat"};
+  var ORDER = ["tiktok","youtube","instagram","pinterest","x","facebook","reddit","soundcloud","snapchat"];
   function esc(s) { var d = document.createElement("div"); d.textContent = s || ""; return d.innerHTML; }
   function show(id, v) { document.getElementById(id).textContent = (v === null || v === undefined) ? "\\u2014" : v; }
   var key = new URLSearchParams(location.search).get("key") || "";
@@ -225,11 +240,23 @@ ADMIN_HTML = """<!DOCTYPE html>
       var html = "";
       ORDER.forEach(function (p) {
         var v = (d.platforms || {})[p];
+        var fv = (d.platform_fails || {})[p];
         var pct = (v && max) ? Math.max(2, Math.round(v / max * 100)) : 0;
         html += '<div class="prow"><div class="name">' + NAMES[p] + '</div>' +
                 '<div class="track"><div class="bar" style="width:' + pct + '%"></div></div>' +
-                '<div class="val">' + ((v === null || v === undefined) ? "\\u2014" : v) + '</div></div>';
+                '<div class="val">' + ((v === null || v === undefined) ? "\\u2014" : v) +
+                ((fv) ? ' <span style="color:#ff8a80;font-size:12px">(' + fv + ' fail)</span>' : '') + '</div></div>';
       });
+      if (d.ig_month !== null && d.ig_month !== undefined) {
+        var cap = d.ig_month_cap || 500;
+        var ipct = Math.min(100, Math.round(d.ig_month / cap * 100));
+        document.getElementById("platforms").innerHTML +=
+          '<div style="margin-top:16px"><h2>INSTAGRAM QUOTA (THIS MONTH)</h2>' +
+          '<div class="prow"><div class="name">Used</div>' +
+          '<div class="track"><div class="bar" style="width:' + ipct + '%"></div></div>' +
+          '<div class="val">' + d.ig_month + ' / ~' + cap + '</div></div>' +
+          '<div class="muted">Approx. downloads served by the free Instagram API this month.</div></div>';
+      }
       document.getElementById("platforms").innerHTML = html;
       var rec = d.recent || [];
       document.getElementById("recent").innerHTML = rec.length ? rec.map(function (e) {
@@ -265,6 +292,8 @@ def detect_platform(url):
         return "pinterest"
     if has("x.com", "twitter.com"):
         return "x"
+    if has("snapchat.com"):
+        return "snapchat"
     if has("vimeo.com"):
         return "vimeo"
     if has("dailymotion.com", "dai.ly"):
@@ -275,7 +304,7 @@ def detect_platform(url):
 PLATFORM_NAMES = {
     "tiktok": "TikTok", "instagram": "Instagram", "youtube": "YouTube",
     "facebook": "Facebook", "soundcloud": "SoundCloud", "reddit": "Reddit",
-    "pinterest": "Pinterest", "x": "X", "vimeo": "Vimeo",
+    "pinterest": "Pinterest", "x": "X", "vimeo": "Vimeo", "snapchat": "Snapchat",
     "dailymotion": "Dailymotion",
 }
 
@@ -298,6 +327,7 @@ def media_id(platform, url):
         "dailymotion": r"(?:video|dai\.ly)/([a-z0-9]+)",
         "facebook": r"(?:v=|videos/|watch\?v=)(\d+)",
         "soundcloud": r"soundcloud\.com/[^/]+/([^/?#]+)",
+        "snapchat": r"(?:spotlight|story|add)/([\w.-]+)",
     }
     pat = pats.get(platform)
     if pat:
@@ -331,14 +361,31 @@ def resolve_tiktok(url):
 
 
 def resolve_instagram(url):
+    try:
+        return _resolve_instagram_api(url)
+    except ValueError as e:
+        if str(e) == INSTAGRAM_LIMIT_ERR:
+            raise
+        # spare route: yt-dlp's own Instagram extractor (works for some
+        # public posts without any API quota)
+        try:
+            return resolve_ytdlp("instagram", url)
+        except Exception:
+            raise e
+
+
+def _resolve_instagram_api(url):
     if not RAPIDAPI_KEY:
         raise ValueError("Instagram is not configured on this server yet.")
     api = f"https://{RAPIDAPI_HOST}/fetch?url=" + urllib.parse.quote(url, safe="")
     data = None
     for _attempt in range(2):  # the free API can be slow — one retry
         try:
+            count_ig_call()
             r = HTTP.get(api, headers={"x-rapidapi-host": RAPIDAPI_HOST,
                                         "x-rapidapi-key": RAPIDAPI_KEY}, timeout=90)
+            if r.status_code == 429:
+                raise ValueError(INSTAGRAM_LIMIT_ERR)
             if r.status_code != 200:
                 raise ValueError(INSTAGRAM_ERR)
             data = r.json()
@@ -468,6 +515,8 @@ def resolve_reddit(url):
 
 
 YTDLP_FORMATS = {
+    "snapchat": "b/best",
+    "instagram": "bv*[height<=720]+ba/b/best",
     "youtube": "bv*[height<=720]+ba/b[height<=720]/bv+ba/b",
     "facebook": "bv*[height<=720]+ba/b/bv+ba/b",
     "vimeo": "bv*[height<=720]+ba/b/bv+ba/b",
@@ -480,19 +529,37 @@ YTDLP_FORMATS = {
 }
 
 
-def ytdlp_extract(url):
+YT_CLIENTS = ["android", "tv", "web_embedded", "ios", "web"]
+
+
+def ytdlp_extract(url, platform=None):
     import yt_dlp
     opts = {"quiet": True, "no_warnings": True, "noplaylist": True,
             "socket_timeout": 30, "retries": 2, "nocheckcertificate": True}
+    if platform == "youtube":
+        last = None
+        for client in YT_CLIENTS:
+            o = dict(opts)
+            o["extractor_args"] = {"youtube": {"player_client": [client]}}
+            try:
+                with yt_dlp.YoutubeDL(o) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                if info:
+                    return info
+            except Exception as e:
+                last = e
+        if last:
+            raise last
+        return None
     with yt_dlp.YoutubeDL(opts) as ydl:
         return ydl.extract_info(url, download=False)
 
 
 def resolve_ytdlp(platform, url):
     try:
-        info = ytdlp_extract(url)
+        info = ytdlp_extract(url, platform=platform)
     except Exception:
-        raise ValueError(GENERIC_ERR)
+        raise ValueError(YOUTUBE_ERR if platform == "youtube" else GENERIC_ERR)
     if not info:
         raise ValueError(GENERIC_ERR)
     title = (info.get("title") or PLATFORM_NAMES[platform] + " media").strip()[:200]
@@ -510,7 +577,9 @@ def resolve_ytdlp(platform, url):
 
 
 INVIDIOUS_INSTANCES = ["invidious.f5.si", "invidious.nerdvpn.de",
-                       "invidious.0011.lt", "inv.nadeko.net", "yewtu.be"]
+                       "invidious.0011.lt", "inv.nadeko.net", "yewtu.be",
+                       "invidious.tiekoetter.com", "inv.thepixora.com",
+                       "invidious.privacyredirect.com"]
 
 
 def resolve_youtube(url):
@@ -552,7 +621,27 @@ def resolve_youtube(url):
                         "ext": "mp4", "thumbnail": thumb}
             except Exception:
                 continue
-    return resolve_ytdlp("youtube", url)
+    try:
+        return resolve_ytdlp("youtube", url)
+    except ValueError:
+        raise ValueError(YOUTUBE_ERR)
+
+
+def resolve_snapchat(url):
+    # yt-dlp's SnapchatSpotlight extractor (public Spotlight / stories)
+    try:
+        info = ytdlp_extract(url, platform="snapchat")
+    except Exception:
+        raise ValueError(SNAPCHAT_ERR)
+    if not info:
+        raise ValueError(SNAPCHAT_ERR)
+    title = (info.get("title") or "Snapchat video").strip()[:200]
+    u = info.get("url") or ""
+    if u and ".mp4" in u.split("?")[0]:
+        return {"kind": "direct", "url": u, "title": title, "ext": "mp4",
+                "thumbnail": info.get("thumbnail")}
+    return {"kind": "ytdlp", "source": url, "format": "b/best",
+            "title": title, "ext": "mp4", "thumbnail": info.get("thumbnail")}
 
 
 def resolve_vimeo(url):
@@ -620,6 +709,7 @@ def resolve_dailymotion(url):
 RESOLVERS = {
     "tiktok": resolve_tiktok,
     "instagram": resolve_instagram,
+    "snapchat": resolve_snapchat,
     "x": resolve_x,
     "reddit": resolve_reddit,
     "youtube": resolve_youtube,
@@ -628,7 +718,41 @@ RESOLVERS = {
 }
 
 
+RESOLVE_CACHE = {}
+RESOLVE_CACHE_LOCK = threading.Lock()
+RESOLVE_TTL = 3 * 3600  # direct CDN URLs rot; 3h is a safe working window
+RESOLVE_CACHE_MAX = 500
+
+
+def _cache_get(key):
+    now = time.time()
+    with RESOLVE_CACHE_LOCK:
+        ent = RESOLVE_CACHE.get(key)
+        if ent and now - ent[0] < RESOLVE_TTL:
+            return dict(ent[1])
+    return None
+
+
+def _cache_put(key, job):
+    with RESOLVE_CACHE_LOCK:
+        if len(RESOLVE_CACHE) >= RESOLVE_CACHE_MAX:
+            oldest = sorted(RESOLVE_CACHE.items(), key=lambda kv: kv[1][0])[:100]
+            for k, _ in oldest:
+                RESOLVE_CACHE.pop(k, None)
+        RESOLVE_CACHE[key] = (time.time(), dict(job))
+
+
 def resolve_url(platform, url):
+    key = f"{platform}-{media_id(platform, url)}"
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+    job = _resolve_url_fresh(platform, url)
+    _cache_put(key, job)
+    return job
+
+
+def _resolve_url_fresh(platform, url):
     if platform in RESOLVERS:
         try:
             return RESOLVERS[platform](url)
@@ -665,8 +789,23 @@ def ytdlp_download_to_dir(source, fmt, platform, tmpdir):
                                    "preferredcodec": "mp3", "preferredquality": "192"}]
     else:
         opts["merge_output_format"] = "mp4"
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        ydl.download([source])
+    if platform == "youtube":
+        last = None
+        for client in YT_CLIENTS:
+            o = dict(opts)
+            o["extractor_args"] = {"youtube": {"player_client": [client]}}
+            try:
+                with yt_dlp.YoutubeDL(o) as ydl:
+                    ydl.download([source])
+                last = None
+                break
+            except Exception as e:
+                last = e
+        if last:
+            raise last
+    else:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            ydl.download([source])
     files = [p for p in Path(tmpdir).iterdir()
              if p.is_file() and not p.name.endswith((".part", ".ytdl", ".temp"))]
     files = [p for p in files if p.stat().st_size > 0]
@@ -736,6 +875,7 @@ SEO_SLUGS = [
     "twitter-video-downloader",
     "soundcloud-downloader",
     "youtube-video-downloader",
+    "snapchat-video-downloader",
 ]
 
 
@@ -768,6 +908,16 @@ for _t in TRUST_PAGES:
     app.add_url_rule(f"/{_t}", endpoint=f"trust_{_t}", view_func=(lambda s: lambda: _trust_page(s))(_t))
 
 
+@app.route("/download-app")
+def download_app():
+    p = BASE / "LonaDownloader.apk"
+    if p.exists():
+        return send_file(p, as_attachment=True,
+                         download_name="LonaDownloader.apk",
+                         mimetype="application/vnd.android.package-archive")
+    return ("", 404)
+
+
 @app.route("/og-image.png")
 def og_image():
     p = BASE / "og-image.png"
@@ -790,6 +940,7 @@ def api_resolve():
     try:
         job = resolve_url(platform, url)
     except ValueError as e:
+        count_failure(platform)
         return jsonify(ok=False, error=str(e)), 422
     job["platform"] = platform
     job["idtag"] = f"{platform}-{media_id(platform, url)}"
@@ -808,7 +959,10 @@ def api_download():
         return jsonify(ok=False, error="That fetch expired — tap the circle again."), 410
     platform = job["platform"]
     ext = job.get("ext", "mp4")
-    filename = f"{job['idtag']}.{ext}"
+    safe_title = re.sub(r"[^\w\- ]+", "", (job.get("title") or "").replace("/", " ")).strip()
+    safe_title = re.sub(r"\s+", " ", safe_title)[:60].strip()
+    filename = (f"{safe_title} [{job['idtag']}].{ext}" if safe_title
+                else f"{job['idtag']}.{ext}")
     mime = EXT_MIME.get(ext, "application/octet-stream")
 
     if job["kind"] == "direct":
@@ -818,7 +972,8 @@ def api_download():
             r.raise_for_status()
         except Exception:
             return jsonify(ok=False, error=GENERIC_ERR), 502
-        resp_headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+        resp_headers = {"Content-Disposition":
+                        "attachment; filename*=UTF-8''" + urllib.parse.quote(filename)}
         if r.headers.get("Content-Length"):
             resp_headers["Content-Length"] = r.headers["Content-Length"]
         count_download(platform, job.get("title") or filename)
@@ -832,7 +987,9 @@ def api_download():
     try:
         if job["kind"] == "ytdlp":
             path = ytdlp_download_to_dir(job["source"], job["format"], platform, tmpdir)
-            filename = f"{job['idtag']}.{path.suffix.lstrip('.') or ext}"
+            realext = path.suffix.lstrip(".") or ext
+            filename = (f"{safe_title} [{job['idtag']}].{realext}" if safe_title
+                        else f"{job['idtag']}.{realext}")
         elif job["kind"] == "merge":
             vpath = Path(tmpdir) / "v.mp4"
             http_download_to_file(job["video_url"], vpath)
@@ -873,7 +1030,10 @@ def admin_data():
     if not _admin_ok():
         return jsonify(ok=False), 404
     days = [(pkt_now() - timedelta(days=i)).strftime("%Y-%m-%d") for i in range(7)]
-    wanted = (["visits", "total"] + [f"p-{p}" for p in ADMIN_PLATFORMS]
+    ig_month_key = f"ig-{pkt_now().strftime('%Y-%m')}"
+    wanted = (["visits", "total", "fails", ig_month_key]
+              + [f"p-{p}" for p in ADMIN_PLATFORMS]
+              + [f"f-{p}" for p in ADMIN_PLATFORMS]
               + [f"d-{d}" for d in days])
     values = {}
 
@@ -898,6 +1058,10 @@ def admin_data():
         today=values.get(f"d-{days[0]}"),
         last7=last7,
         platforms={p: values.get(f"p-{p}") for p in ADMIN_PLATFORMS},
+        fails_total=values.get("fails"),
+        platform_fails={p: values.get(f"f-{p}") for p in ADMIN_PLATFORMS},
+        ig_month=values.get(ig_month_key),
+        ig_month_cap=500,
         recent=recent,
     )
 

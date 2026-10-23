@@ -70,13 +70,13 @@
     box-shadow:0 0 0 1px rgba(0,0,0,.9), inset 0 0 42px rgba(0,0,0,.85), 0 0 34px rgba(212, 175, 55, .30);
     cursor:pointer; outline:none;
   }
-  #sphere::before, #sphere::after {
-    content:""; position:absolute; left:50%; width:54px; height:14px; transform:translateX(-50%);
-    border-radius:50%; background:radial-gradient(ellipse at center, rgba(255, 226, 140, .95), rgba(255, 226, 140, 0) 70%);
-    pointer-events:none;
+  #sphere { display:flex; align-items:center; justify-content:center; }
+  #tapLabel {
+    font-family:Georgia, "Times New Roman", serif; font-size:21px; letter-spacing:14px; text-indent:14px;
+    color:rgba(233, 199, 102, .92); text-shadow:0 0 12px rgba(220, 188, 99, .35);
+    pointer-events:none; transition:opacity .25s;
   }
-  #sphere::before { top:-8px; }
-  #sphere::after { bottom:-8px; }
+  #sphere.busy #tapLabel, #sphere.shiver #tapLabel { opacity:0; }
   #sphere.busy { animation:pulse 1.6s ease-in-out infinite; }
   #sphere.shiver { animation:pulse 1.6s ease-in-out infinite, shiver .12s linear infinite; }
   @keyframes pulse { 0%,100%{ transform:scale(1);} 50%{ transform:scale(1.025);} }
@@ -87,14 +87,34 @@
   }
   #status.show { visibility:visible; }
   #status.error { color:#ff8a80; }
+  #progress { margin-top:14px; width:min(74vw, 320px); visibility:hidden; }
+  #progress.show { visibility:visible; }
+  #progressText { font-size:15px; font-weight:300; letter-spacing:.5px; color:#e8e8e8; text-align:center; }
+  #progressTrack { margin-top:9px; height:3px; border-radius:2px; background:#26221a; overflow:hidden; }
+  #progressBar { height:100%; width:0%; border-radius:2px;
+    background:linear-gradient(90deg, #a97f27, #e9c766); transition:width .2s; }
   .videos-entry {
-    margin-bottom:calc(30px + env(safe-area-inset-bottom)); align-self:center;
+    margin-bottom:20px; align-self:center;
     background:none; border:none; cursor:pointer; text-align:center; color:#e8a33d;
   }
   .dots { width:64px; height:64px; margin:0 auto 8px; position:relative; }
   .dots i { position:absolute; border-radius:50%; background:#e8a33d; }
   .videos-entry span {
     display:block; font-size:15px; font-weight:100; letter-spacing:7px; text-indent:7px; color:#dcbc63;
+  }
+  .feat-row {
+    display:flex; gap:14px; justify-content:center; align-self:center;
+    margin-bottom:calc(26px + env(safe-area-inset-bottom));
+  }
+  .feat-btn {
+    width:148px; padding:12px 0 10px; border:1.5px solid rgba(222, 184, 84, .75); border-radius:16px;
+    background:rgba(20, 17, 10, .55); cursor:pointer; text-align:center;
+  }
+  .feat-btn .fw {
+    display:block; font-size:19px; font-weight:600; letter-spacing:.5px; color:#f3d67c;
+  }
+  .feat-btn .fs {
+    display:block; margin-top:3px; font-size:11.5px; font-weight:300; letter-spacing:.5px; color:#9a9a9a;
   }
 
   /* ---------- overlays ---------- */
@@ -171,13 +191,18 @@
     <div class="brand-sub"><span class="line"></span><span class="word">DOWNLOADER</span><span class="line"></span></div>
   </div>
   <div class="sphere-wrap">
-    <div id="sphere" role="button" aria-label="Download"></div>
+    <div id="sphere" role="button" aria-label="Download"><span id="tapLabel">TAP</span></div>
     <div id="status"></div>
+    <div id="progress"><div id="progressText"></div><div id="progressTrack"><div id="progressBar"></div></div></div>
   </div>
   <button class="videos-entry" id="videosBtn">
     <div class="dots" id="dotsLogo"></div>
     <span>VIDEOS</span>
   </button>
+  <div class="feat-row">
+    <button class="feat-btn" id="statusSaverBtn"><span class="fw">Status</span><span class="fs">Saver</span></button>
+    <button class="feat-btn" id="deletedBtn"><span class="fw">Deleted</span><span class="fs">Messages Viewer</span></button>
+  </div>
 </div>
 
 <!-- ================= LIBRARY ================= -->
@@ -204,11 +229,20 @@
       <li>Facebook — public videos</li>
       <li>Reddit — video posts</li>
       <li>SoundCloud — audio</li>
-      <li>Vimeo</li>
-      <li>Dailymotion</li>
+      <li>Snapchat — public Spotlight videos</li>
     </ul>
     <p style="margin-top:12px">Only public links work. Private or deleted posts can't be fetched.</p>
     <button class="close" data-close="infoOverlay">Close</button>
+  </div>
+</div>
+
+<!-- ============ APP FEATURE (browser) ============ -->
+<div class="overlay" id="appFeatureOverlay">
+  <div class="panel">
+    <h2 id="appFeatureTitle">STATUS SAVER</h2>
+    <p id="appFeatureText">This feature lives in the free Lona Android app.</p>
+    <a href="/download-app" style="text-decoration:none"><button class="close" style="background:#e8a33d;border-color:#e8a33d;color:#111;font-weight:600">Get the free app</button></a>
+    <button class="close" data-close="appFeatureOverlay">Close</button>
   </div>
 </div>
 
@@ -315,12 +349,32 @@
     setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 4000);
   }
 
-  function fetchFile(token) {
+  function parseFilename(cd) {
+    if (!cd) return null;
+    var m = /filename\*=UTF-8''([^;]+)/i.exec(cd);
+    if (m) { try { return decodeURIComponent(m[1]); } catch (e) { return m[1]; } }
+    m = /filename="?([^";]+)"?/.exec(cd);
+    return m ? m[1] : null;
+  }
+
+  function fetchFile(token, onProgress) {
     return fetch('/api/download?token=' + encodeURIComponent(token)).then(function (r) {
       if (!r.ok) throw new Error('download failed');
-      var cd = r.headers.get('Content-Disposition') || '', name = 'lona-video.mp4', m = /filename="([^"]+)"/.exec(cd);
-      if (m) name = m[1];
-      return r.blob().then(function (b) { return { blob: b, name: name }; });
+      var name = parseFilename(r.headers.get('Content-Disposition')) || 'lona-video.mp4';
+      var total = parseInt(r.headers.get('Content-Length') || '0', 10) || 0;
+      if (!r.body || !r.body.getReader) {
+        return r.blob().then(function (b) { return { blob: b, name: name }; });
+      }
+      var reader = r.body.getReader(), chunks = [], received = 0;
+      function pump() {
+        return reader.read().then(function (res) {
+          if (res.done) return new Blob(chunks, { type: r.headers.get('Content-Type') || 'video/mp4' });
+          chunks.push(res.value); received += res.value.length;
+          if (onProgress) onProgress(received, total);
+          return pump();
+        });
+      }
+      return pump().then(function (b) { return { blob: b, name: name }; });
     });
   }
 
@@ -336,8 +390,10 @@
     var old = btn.textContent; btn.textContent = 'Fetching…'; btn.disabled = true;
     resolve(item.sourceUrl).then(function (res) {
       if (!res.ok) throw new Error(res.error || 'failed');
-      btn.textContent = 'Downloading…';
-      return fetchFile(res.token);
+      btn.textContent = '0%';
+      return fetchFile(res.token, function (rec, tot) {
+        if (tot > 0) btn.textContent = Math.min(100, Math.round(rec / tot * 100)) + '%';
+      });
     }).then(function (f) {
       saveBlob(f.blob, f.name); btn.textContent = old; btn.disabled = false;
     }).catch(function () {
@@ -345,6 +401,23 @@
       setTimeout(function () { btn.textContent = old; }, 2200);
     });
   }
+
+  var progressEl = document.getElementById('progress'),
+      progressText = document.getElementById('progressText'),
+      progressBar = document.getElementById('progressBar');
+  function fmtMB(n) { return (n / 1048576).toFixed(1) + ' MB'; }
+  function showProgress(received, total) {
+    progressEl.className = 'show';
+    if (total > 0) {
+      var pct = Math.min(100, Math.round(received / total * 100));
+      progressText.textContent = pct + '% · ' + fmtMB(received) + ' of ' + fmtMB(total);
+      progressBar.style.width = pct + '%';
+    } else {
+      progressText.textContent = fmtMB(received);
+      progressBar.style.width = '40%';
+    }
+  }
+  function hideProgress() { progressEl.className = ''; progressBar.style.width = '0%'; }
 
   /* ---------- main tap flow ---------- */
   function onSphereTap() {
@@ -365,8 +438,9 @@
       startPulse();
       resolve(url).then(function (res) {
         if (!res.ok) throw new Error(res.error || 'Could not fetch that link.');
-        setStatus('Downloading…', false);
-        return fetchFile(res.token).then(function (f) { return { f: f, res: res, url: url }; });
+        setStatus('', false);
+        showProgress(0, 0);
+        return fetchFile(res.token, showProgress).then(function (f) { return { f: f, res: res, url: url }; });
       }).then(function (out) {
         saveBlob(out.f.blob, out.f.name);
         stopPulse(); vibrate(120);
@@ -377,11 +451,12 @@
           date: new Date().toLocaleDateString()
         });
       }).catch(function (err) {
-        stopPulse();
+        stopPulse(); hideProgress();
         setStatus(err.message || 'Something went wrong — please try again.', true);
       }).then(function () {
         busy = false;
         sphere.classList.remove('busy', 'shiver');
+        setTimeout(hideProgress, 600);
       });
     });
   }
@@ -395,6 +470,21 @@
   document.getElementById('videosBtn').addEventListener('click', function () { renderLib(); show('libraryScreen'); });
   document.getElementById('backBtn').addEventListener('click', function () { show('homeScreen'); });
   document.getElementById('infoBtn').addEventListener('click', function () { document.getElementById('infoOverlay').classList.add('open'); });
+  function openFeature(which, title, text) {
+    if (window.LonaAndroid && window.LonaAndroid.openFeature) {
+      window.LonaAndroid.openFeature(which);
+      return;
+    }
+    document.getElementById('appFeatureTitle').textContent = title;
+    document.getElementById('appFeatureText').textContent = text;
+    document.getElementById('appFeatureOverlay').classList.add('open');
+  }
+  document.getElementById('statusSaverBtn').addEventListener('click', function () {
+    openFeature('status', 'STATUS SAVER', 'Save WhatsApp statuses you have viewed — pick the contact, tap save, only that status lands in your gallery. This feature lives in the free Lona Android app.');
+  });
+  document.getElementById('deletedBtn').addEventListener('click', function () {
+    openFeature('deleted', 'DELETED MESSAGES VIEWER', 'See messages after someone deletes them for everyone — Lona keeps a copy on your phone and tells you the moment one is deleted. This feature lives in the free Lona Android app.');
+  });
   document.getElementById('adsBtn').addEventListener('click', function () { document.getElementById('proOverlay').classList.add('open'); });
   document.querySelectorAll('[data-close]').forEach(function (b) {
     b.addEventListener('click', function () { document.getElementById(b.getAttribute('data-close')).classList.remove('open'); });
@@ -434,7 +524,7 @@
 <h3>Where does the downloaded video go?</h3><p>It is saved in Lona's VIDEOS library. Tap the Download button on it to put the file on your device; in the Lona Android app, downloads go straight to your gallery.</p>
   </div>
   <h2>More downloaders from Lona</h2>
-  <p>Lona is one downloader for every platform — all from the same golden circle: <a href="/">Lona Downloader home (all platforms)</a> · <a href="/tiktok-video-downloader">TikTok Video Downloader</a> · <a href="/instagram-reel-downloader">Instagram Reel Downloader</a> · <a href="/instagram-photo-downloader">Instagram Photo Downloader</a> · <a href="/pinterest-video-downloader">Pinterest Video Downloader</a> · <a href="/facebook-video-downloader">Facebook Video Downloader</a> · <a href="/reddit-video-downloader">Reddit Video Downloader</a> · <a href="/soundcloud-downloader">SoundCloud Downloader</a> · <a href="/youtube-video-downloader">YouTube Video Downloader</a></p>
+  <p>Lona is one downloader for every platform — all from the same golden circle: <a href="/">Lona Downloader home (all platforms)</a> · <a href="/tiktok-video-downloader">TikTok Video Downloader</a> · <a href="/instagram-reel-downloader">Instagram Reel Downloader</a> · <a href="/instagram-photo-downloader">Instagram Photo Downloader</a> · <a href="/pinterest-video-downloader">Pinterest Video Downloader</a> · <a href="/facebook-video-downloader">Facebook Video Downloader</a> · <a href="/reddit-video-downloader">Reddit Video Downloader</a> · <a href="/soundcloud-downloader">SoundCloud Downloader</a> · <a href="/youtube-video-downloader">YouTube Video Downloader</a> · <a href="/snapchat-video-downloader">Snapchat Video Downloader</a></p>
   <a class="up" href="#homeScreen">↑ Back to the downloader</a>
   <p style="text-align:center;font-size:14px;margin-top:16px"><a href="/about">About</a> · <a href="/contact">Contact</a> · <a href="/privacy-policy">Privacy Policy</a></p>
   <p class="fineprint">Lona Downloader is not affiliated with X Corp. or Twitter, Inc. Please download only content you own or have permission to save, and credit the original creator when you share.</p>
