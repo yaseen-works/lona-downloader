@@ -421,8 +421,8 @@
 
   /* ---------- main tap flow ---------- */
   function onSphereTap() {
-    if (busy) return;
     vibrate(40);
+    if (busy) { setStatus('Please wait — finishing the current one first\u2026', false); return; }
     setStatus('Reading your copied link\u2026', false);
     var clipPromise;
     if (window.LonaAndroid && window.LonaAndroid.getClipboard) {
