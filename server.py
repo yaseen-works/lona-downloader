@@ -1013,8 +1013,16 @@ def api_download():
 
     if job["kind"] == "direct":
         headers = {"Referer": job["referer"]} if job.get("referer") else {}
+        r = None
         try:
-            r = HTTP.get(job["url"], stream=True, timeout=120, headers=headers)
+            if "googlevideo.com" in job["url"]:
+                # YouTube's CDN rejects plain datacenter fetches from some
+                # server IPs; a real Chrome TLS fingerprint gets through.
+                from curl_cffi import requests as creq
+                r = creq.get(job["url"], stream=True, timeout=120,
+                             headers=headers, impersonate="chrome124")
+            else:
+                r = HTTP.get(job["url"], stream=True, timeout=120, headers=headers)
             r.raise_for_status()
         except Exception:
             return jsonify(ok=False, error=GENERIC_ERR), 502
