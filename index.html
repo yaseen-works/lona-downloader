@@ -409,6 +409,20 @@
   }
   function hideProgress() { progressEl.className = ''; progressBar.style.width = '0%'; }
 
+  /* In the app, the native download service reports progress here:
+     strip + numbers only, nothing else written. */
+  window.__lonaNativeProgress = function (pct, got, total, state) {
+    if (state === 'run') { showProgress(got || 0, total || 0); }
+    else if (state === 'done') {
+      var t = total > 0 ? total : (got || 0);
+      showProgress(t, t);
+      setTimeout(hideProgress, 1200);
+    } else if (state === 'fail') {
+      hideProgress();
+      setStatus('Download failed — please try again.', true);
+    }
+  };
+
   /* ---------- main tap flow ---------- */
   function onSphereTap() {
     sphere.classList.remove('tapped'); void sphere.offsetWidth; sphere.classList.add('tapped');
@@ -432,6 +446,7 @@
       var url = extractUrl(text);
       if (!url) { setStatus('Copy a link first, then tap the circle', true); return; }
       busy = true;
+      var nativeUsed = false;
       sphere.classList.add('busy', 'shiver');
       setStatus('Fetching link…', false);
       startPulse();
@@ -441,7 +456,9 @@
           var dlUrl = res.direct_url || (location.origin + '/api/download?token=' + encodeURIComponent(res.token));
           window.LonaAndroid.downloadNative(dlUrl, res.filename || 'lona-video.mp4');
           stopPulse(); vibrate(120);
-          setStatus('Download started — progress in notifications', false);
+          setStatus('', false);
+          showProgress(0, 0);
+          nativeUsed = true;
           addToLib({
             platform: res.platform, title: res.title,
             thumbnail: res.thumbnail, sourceUrl: url,
@@ -470,7 +487,7 @@
       }).then(function () {
         busy = false;
         sphere.classList.remove('busy', 'shiver');
-        setTimeout(hideProgress, 600);
+        if (!nativeUsed) setTimeout(hideProgress, 600);
       });
     });
   }
