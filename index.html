@@ -411,9 +411,16 @@
   function onSphereTap() {
     if (busy) return;
     vibrate(40);
+    setStatus('Reading your copied link\u2026', false);
     var clipPromise;
-    if (navigator.clipboard && navigator.clipboard.readText) {
-      clipPromise = navigator.clipboard.readText().catch(function () { return ''; });
+    if (window.LonaAndroid && window.LonaAndroid.getClipboard) {
+      try { clipPromise = Promise.resolve(window.LonaAndroid.getClipboard() || ''); }
+      catch (e) { clipPromise = Promise.resolve(''); }
+    } else if (navigator.clipboard && navigator.clipboard.readText) {
+      clipPromise = Promise.race([
+        navigator.clipboard.readText().catch(function () { return ''; }),
+        new Promise(function (r) { setTimeout(function () { r(''); }, 1500); })
+      ]);
     } else {
       clipPromise = Promise.resolve('');
     }
