@@ -578,9 +578,7 @@ def resolve_ytdlp(platform, url):
 
 
 INVIDIOUS_INSTANCES = ["invidious.f5.si", "invidious.nerdvpn.de",
-                       "invidious.0011.lt", "inv.nadeko.net", "yewtu.be",
-                       "invidious.tiekoetter.com", "inv.thepixora.com",
-                       "invidious.privacyredirect.com"]
+                       "invidious.0011.lt"]
 
 
 def resolve_youtube(url):
@@ -591,7 +589,7 @@ def resolve_youtube(url):
         vid = m.group(1)
         for inst in INVIDIOUS_INSTANCES:
             try:
-                r = HTTP.get(f"https://{inst}/api/v1/videos/{vid}", timeout=25)
+                r = HTTP.get(f"https://{inst}/api/v1/videos/{vid}", timeout=8)
                 if r.status_code != 200:
                     continue
                 d = r.json()

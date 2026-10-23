@@ -447,7 +447,7 @@
       sphere.classList.add('busy', 'shiver');
       setStatus('Fetching link…', false);
       startPulse();
-      resolve(url).then(function (res) {
+      Promise.race([resolve(url), new Promise(function (_, rej) { setTimeout(function () { rej(new Error('Server is taking too long — please try again in a moment.')); }, 100000); })]).then(function (res) {
         if (!res.ok) throw new Error(res.error || 'Could not fetch that link.');
         if (window.LonaAndroid && window.LonaAndroid.downloadNative) {
           var dlUrl = res.direct_url || (location.origin + '/api/download?token=' + encodeURIComponent(res.token));
