@@ -438,10 +438,25 @@
       startPulse();
       resolve(url).then(function (res) {
         if (!res.ok) throw new Error(res.error || 'Could not fetch that link.');
+        if (window.LonaAndroid && window.LonaAndroid.downloadNative) {
+          var dlUrl = res.direct_url || (location.origin + '/api/download?token=' + encodeURIComponent(res.token));
+          window.LonaAndroid.downloadNative(dlUrl, res.filename || 'lona-video.mp4');
+          stopPulse(); vibrate(120);
+          setStatus('Download started — progress in notifications', false);
+          addToLib({
+            platform: res.platform, title: res.title,
+            thumbnail: res.thumbnail, sourceUrl: url,
+            date: new Date().toLocaleDateString()
+          });
+          busy = false;
+          sphere.classList.remove('busy', 'shiver');
+          return null;
+        }
         setStatus('', false);
         showProgress(0, 0);
         return fetchFile(res.token, showProgress).then(function (f) { return { f: f, res: res, url: url }; });
       }).then(function (out) {
+        if (!out) return;
         saveBlob(out.f.blob, out.f.name);
         stopPulse(); vibrate(120);
         setStatus('Download complete', false);

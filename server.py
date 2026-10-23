@@ -991,9 +991,19 @@ def api_resolve():
     job["platform"] = platform
     job["idtag"] = f"{platform}-{media_id(platform, url)}"
     tok = new_token(job)
-    return jsonify(ok=True, platform=PLATFORM_NAMES[platform],
-                   title=job.get("title") or "Video",
-                   thumbnail=job.get("thumbnail"), token=tok)
+    safe_title = re.sub(r"[^\w\- ]+", "", (job.get("title") or "").replace("/", " ")).strip()
+    safe_title = re.sub(r"\s+", " ", safe_title)[:60].strip()
+    filename = (f"{safe_title} [{job['idtag']}].{job.get('ext', 'mp4')}" if safe_title
+                else f"{job['idtag']}.{job.get('ext', 'mp4')}")
+    resp = {"ok": True, "platform": PLATFORM_NAMES[platform],
+            "title": job.get("title") or "Video",
+            "thumbnail": job.get("thumbnail"), "token": tok,
+            "filename": filename}
+    # The Android app can pull googlevideo files itself (its connection is
+    # accepted); the server's IP is refused, so hand the app the raw URL.
+    if job.get("kind") == "direct" and "googlevideo.com" in (job.get("url") or ""):
+        resp["direct_url"] = job["url"]
+    return jsonify(resp)
 
 
 @app.route("/api/download")
