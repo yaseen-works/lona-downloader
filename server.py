@@ -709,6 +709,10 @@ def sitemap_xml():
         (f"https://lona-downloader.onrender.com/{s}", "2026-10-22", "0.9")
         for s in SEO_SLUGS
     ]
+    pages += [
+        (f"https://lona-downloader.onrender.com/{t}", "2026-10-23", "0.5")
+        for t in ("about", "contact", "privacy-policy")
+    ]
     items = "".join(
         f"<url><loc>{u}</loc><lastmod>{d}</lastmod><priority>{p}</priority></url>"
         for u, d, p in pages
@@ -748,6 +752,20 @@ for _slug in SEO_SLUGS:
         f"/{_slug}", endpoint=f"seo_{_slug}",
         view_func=(lambda s: lambda: _seo_page(s))(_slug),
     )
+
+
+TRUST_PAGES = {"about": "about.html", "contact": "contact.html", "privacy-policy": "privacy.html"}
+
+
+def _trust_page(slug):
+    p = BASE / TRUST_PAGES[slug]
+    if p.exists():
+        return send_file(p)
+    return ("", 404)
+
+
+for _t in TRUST_PAGES:
+    app.add_url_rule(f"/{_t}", endpoint=f"trust_{_t}", view_func=(lambda s: lambda: _trust_page(s))(_t))
 
 
 @app.route("/og-image.png")
