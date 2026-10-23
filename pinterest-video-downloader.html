@@ -81,6 +81,8 @@
   #sphere.shiver { animation:pulse 1.6s ease-in-out infinite, shiver .12s linear infinite; }
   @keyframes pulse { 0%,100%{ transform:scale(1);} 50%{ transform:scale(1.025);} }
   @keyframes shiver { 0%{ margin-left:0;} 25%{ margin-left:.6px;} 75%{ margin-left:-.6px;} 100%{ margin-left:0;} }
+  @keyframes tapblink { 0%{ transform:scale(1); filter:brightness(1); box-shadow:0 0 0 rgba(232,163,61,0);} 30%{ transform:scale(.94); filter:brightness(1.75); box-shadow:0 0 46px rgba(232,163,61,.85);} 100%{ transform:scale(1); filter:brightness(1); box-shadow:0 0 0 rgba(232,163,61,0);} }
+  #sphere.tapped { animation:tapblink .35s ease; }
   #status {
     margin-top:34px; min-height:22px; font-size:16px; font-weight:300; letter-spacing:.4px;
     color:#e8e8e8; text-align:center; padding:0 24px; visibility:hidden;
@@ -421,6 +423,8 @@
 
   /* ---------- main tap flow ---------- */
   function onSphereTap() {
+    sphere.classList.remove('tapped'); void sphere.offsetWidth; sphere.classList.add('tapped');
+    setTimeout(function () { sphere.classList.remove('tapped'); }, 380);
     vibrate(40);
     if (busy) { setStatus('Please wait — finishing the current one first\u2026', false); return; }
     setStatus('Reading your copied link\u2026', false);
