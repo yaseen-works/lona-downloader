@@ -33,6 +33,7 @@ INDEX_HTML = BASE / "index.html"
 TOKEN_TTL = 600  # seconds
 
 RAPIDAPI_HOST = "instagram-downloader-download-instagram-videos-stories1.p.rapidapi.com"
+YT_API_HOST = "yt-api.p.rapidapi.com"  # YT-API by ytjar — free Basic plan (2026-10-23)
 
 
 def load_rapidapi_key():
@@ -621,10 +622,55 @@ def resolve_youtube(url):
                         "ext": "mp4", "thumbnail": thumb}
             except Exception:
                 continue
+    api_job = resolve_youtube_api(vid) if m else None
+    if api_job:
+        return api_job
     try:
         return resolve_ytdlp("youtube", url)
     except ValueError:
         raise ValueError(YOUTUBE_ERR)
+
+
+def resolve_youtube_api(vid):
+    """YT-API (RapidAPI, free plan, 300 req/mo, 2 units per /dl call).
+    Only used when the free Invidious route fails, so the quota lasts.
+    Returns a job dict or None."""
+    if not RAPIDAPI_KEY or not vid:
+        return None
+    try:
+        month = pkt_now().strftime("%Y-%m")
+        _fire_and_forget(_abacus_hit, f"ytapi-{month}")
+        r = HTTP.get(f"https://{YT_API_HOST}/dl",
+                     params={"id": vid, "cgeo": "DE"},
+                     headers={"x-rapidapi-host": YT_API_HOST,
+                              "x-rapidapi-key": RAPIDAPI_KEY}, timeout=60)
+        if r.status_code != 200:
+            return None
+        d = r.json()
+        if (d.get("status") or "").upper() != "OK":
+            return None
+        formats = [f for f in (d.get("formats") or []) if f.get("url")]
+        if not formats:
+            return None
+        # progressive MP4s (audio+video in one file): prefer itag 22 (720p),
+        # then 18 (360p), then the highest listed progressive format
+        def score(f):
+            itag = f.get("itag")
+            if itag == 22:
+                return 3
+            if itag == 18:
+                return 2
+            mt = f.get("mimeType") or ""
+            return 1 if ("mp4a" in mt and "avc1" in mt) else 0
+        best = max(formats, key=score)
+        if score(best) == 0:
+            return None
+        return {"kind": "direct", "url": best["url"],
+                "title": (d.get("title") or "YouTube video").strip()[:200],
+                "ext": "mp4",
+                "thumbnail": f"https://i.ytimg.com/vi/{vid}/hqdefault.jpg"}
+    except Exception:
+        return None
 
 
 def resolve_snapchat(url):
