@@ -421,15 +421,38 @@
   }
   function hideProgress() { progressEl.className = ''; progressBar.style.width = '0%'; }
 
-  /* In the app, the native download service reports progress here:
-     strip + numbers only, nothing else written. */
+  /* In the app, the native download service reports progress here.
+     Progress follows the real download: 0 -> 100, then "Download complete".
+     Watchdog: if the byte count does not move for 90s (service killed or
+     network stalled), say so plainly instead of freezing on 0.0 MB. */
+  var nativeWatch = null, nativeLastGot = -1, nativeLastChange = 0;
+  function nativeWatchStart() {
+    nativeLastGot = -1; nativeLastChange = Date.now();
+    if (nativeWatch) clearInterval(nativeWatch);
+    nativeWatch = setInterval(function () {
+      if (Date.now() - nativeLastChange > 90000) {
+        clearInterval(nativeWatch); nativeWatch = null;
+        hideProgress();
+        setStatus('Download atak gayi — dobara tap karein', true);
+      }
+    }, 5000);
+  }
+  function nativeWatchStop() {
+    if (nativeWatch) { clearInterval(nativeWatch); nativeWatch = null; }
+  }
   window.__lonaNativeProgress = function (pct, got, total, state) {
-    if (state === 'run') { showProgress(got || 0, total || 0); }
+    if (state === 'run') {
+      if (got !== nativeLastGot) { nativeLastGot = got; nativeLastChange = Date.now(); }
+      showProgress(got || 0, total || 0);
+    }
     else if (state === 'done') {
+      nativeWatchStop();
       var t = total > 0 ? total : (got || 0);
       showProgress(t, t);
-      setTimeout(hideProgress, 1200);
+      setStatus('Download complete', false);
+      setTimeout(hideProgress, 4000);
     } else if (state === 'fail') {
+      nativeWatchStop();
       hideProgress();
       setStatus('Download failed — please try again.', true);
     }
@@ -468,8 +491,9 @@
           var dlUrl = res.direct_url || (location.origin + '/api/download?token=' + encodeURIComponent(res.token));
           window.LonaAndroid.downloadNative(dlUrl, res.filename || 'lona-video.mp4');
           stopPulse(); vibrate(120);
-          setStatus('', false);
+          setStatus('Downloading…', false);
           showProgress(0, 0);
+          nativeWatchStart();
           nativeUsed = true;
           addToLib({
             platform: res.platform, title: res.title,
@@ -569,7 +593,6 @@
   <h2>More downloaders from Lona</h2>
   <p>Lona is one downloader for every platform — all from the same golden circle: <a href="/">Lona Downloader home (all platforms)</a> · <a href="/tiktok-video-downloader">TikTok Video Downloader</a> · <a href="/instagram-reel-downloader">Instagram Reel Downloader</a> · <a href="/instagram-photo-downloader">Instagram Photo Downloader</a> · <a href="/pinterest-video-downloader">Pinterest Video Downloader</a> · <a href="/facebook-video-downloader">Facebook Video Downloader</a> · <a href="/reddit-video-downloader">Reddit Video Downloader</a> · <a href="/soundcloud-downloader">SoundCloud Downloader</a> · <a href="/youtube-video-downloader">YouTube Video Downloader</a> · <a href="/snapchat-video-downloader">Snapchat Video Downloader</a></p>
   <a class="up" href="#homeScreen">↑ Back to the downloader</a>
-  <p style="text-align:center;font-size:14px;margin-top:16px"><a href="/about">About</a> · <a href="/contact">Contact</a> · <a href="/privacy-policy">Privacy Policy</a></p>
   <p class="fineprint">Lona Downloader is not affiliated with X Corp. or Twitter, Inc. Please download only content you own or have permission to save, and credit the original creator when you share.</p>
 </main>
 </body>
