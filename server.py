@@ -246,7 +246,7 @@ ADMIN_HTML = """<!DOCTYPE html>
         html += '<div class="prow"><div class="name">' + NAMES[p] + '</div>' +
                 '<div class="track"><div class="bar" style="width:' + pct + '%"></div></div>' +
                 '<div class="val">' + ((v === null || v === undefined) ? "\\u2014" : v) +
-                ((fv) ? ' <span style="color:#ff8a80;font-size:12px">(' + fv + ' fail)</span>' : '') + '</div></div>';
+                '' + '</div></div>';
       });
       if (d.ig_month !== null && d.ig_month !== undefined) {
         var cap = d.ig_month_cap || 500;
