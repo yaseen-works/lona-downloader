@@ -896,6 +896,13 @@ def sitemap_xml():
         (f"https://lona-downloader.onrender.com/{t}", "2026-10-23", "0.5")
         for t in ("about", "contact", "privacy-policy")
     ]
+    pages += [
+        ("https://lona-downloader.onrender.com/blog", "2026-10-26", "0.6")
+    ]
+    pages += [
+        (f"https://lona-downloader.onrender.com/blog/{s}", "2026-10-26", "0.7")
+        for s in ("whatsapp-deleted-messages", "tiktok-without-watermark", "whatsapp-status-saver")
+    ]
     items = "".join(
         f"<url><loc>{u}</loc><lastmod>{d}</lastmod><priority>{p}</priority></url>"
         for u, d, p in pages
@@ -920,6 +927,8 @@ SEO_SLUGS = [
     "soundcloud-downloader",
     "youtube-video-downloader",
     "snapchat-video-downloader",
+    "snapchat-spotlight-downloader",
+    "snapchat-story-downloader",
 ]
 
 
@@ -950,6 +959,23 @@ def _trust_page(slug):
 
 for _t in TRUST_PAGES:
     app.add_url_rule(f"/{_t}", endpoint=f"trust_{_t}", view_func=(lambda s: lambda: _trust_page(s))(_t))
+
+
+def _blog_page(slug):
+    if slug in ("", "/"):
+        p = BASE / "blog" / "index.html"
+    else:
+        if "/" in slug or "\\" in slug or slug.startswith("."):
+            return ("", 404)
+        p = BASE / "blog" / f"{slug}.html"
+    if p.exists():
+        return send_file(p)
+    return ("", 404)
+
+
+app.add_url_rule("/blog", endpoint="blog_index", view_func=lambda: _blog_page(""))
+app.add_url_rule("/blog/", endpoint="blog_index_slash", view_func=lambda: _blog_page(""))
+app.add_url_rule("/blog/<slug>", endpoint="blog_article", view_func=lambda slug: _blog_page(slug))
 
 
 @app.route("/download-app")
