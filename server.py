@@ -873,6 +873,11 @@ def favicon():
     return ("", 204)
 
 
+@app.route("/e869b3bb1b342ff19fdba9b349212ebc.txt")
+def indexnow_key():
+    return Response("e869b3bb1b342ff19fdba9b349212ebc", mimetype="text/plain")
+
+
 @app.route("/robots.txt")
 def robots_txt():
     body = (
