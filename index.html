@@ -175,7 +175,6 @@
 </style>
 </head>
 <body>
-
 <!-- ================= HOME ================= -->
 <div class="screen active" id="homeScreen">
   <button class="corner" id="infoBtn" aria-label="Info">i</button>
@@ -369,7 +368,7 @@
           return pump();
         });
       }
-      return pump().then(function (b) { return { blob: b, name: b.name }; });
+      return pump().then(function (b) { return { blob: b, name: name }; });
     });
   }
 
@@ -380,11 +379,87 @@
     }).then(function (r) { return r.json(); });
   }
 
+  /* On-device resolve (Lona Android app v1.4+): the phone calls the same free
+     APIs the server uses, but from its own IP — which TikTok / YouTube do not
+     datacenter-block the way they block our server. Any failure falls back to
+     the server, so the app never does worse than before. */
+  function platformOf(url) {
+    var h = '';
+    try { h = new URL(url).hostname.toLowerCase(); } catch (e) { return null; }
+    if (h.indexOf('tiktok.com') >= 0) return 'tiktok';
+    if (h.indexOf('youtube.com') >= 0 || h.indexOf('youtu.be') >= 0) return 'youtube';
+    return null;
+  }
+  function nativeMediaId(plat, url) {
+    var m = null;
+    if (plat === 'tiktok') m = /video\/(\d+)/.exec(url);
+    else if (plat === 'youtube') m = /(?:v=|youtu\.be\/|shorts\/)([\w-]{6,})/.exec(url);
+    return m ? m[1] : Date.now().toString(36);
+  }
+  function nativeFilename(title, plat, id, ext) {
+    var safe = (title || '').replace(/[^\p{L}\p{N}\- ]+/gu, '').replace(/\s+/g, ' ').trim().substring(0, 60);
+    var tag = plat + '-' + id;
+    return (safe ? safe + ' [' + tag + '].' : tag + '.') + (ext || 'mp4');
+  }
+  var PLAT_NAMES = { tiktok: 'TikTok', youtube: 'YouTube' };
+  function resolveOnDevice(plat, url) {
+    return new Promise(function (resolveP, rejectP) {
+      var done = false;
+      var to = setTimeout(function () {
+        if (done) return; done = true;
+        window.__lonaNativeResolveCb = null;
+        rejectP(new Error('native resolve timed out'));
+      }, 60000);
+      window.__lonaNativeResolveCb = function (jsonStr) {
+        if (done) return; done = true;
+        clearTimeout(to); window.__lonaNativeResolveCb = null;
+        try {
+          var d = JSON.parse(jsonStr);
+          if (d && d.ok && d.url) {
+            resolveP({
+              ok: true, platform: PLAT_NAMES[plat] || plat,
+              title: d.title || 'Video', thumbnail: d.thumbnail || null,
+              filename: nativeFilename(d.title, plat, nativeMediaId(plat, url), d.ext),
+              direct_url: d.url, nativeReferer: d.referer || null
+            });
+          } else rejectP(new Error('native resolve failed'));
+        } catch (e) { rejectP(e); }
+      };
+      try { window.LonaAndroid.resolveOnDevice(plat, url); }
+      catch (e) {
+        if (done) return; done = true;
+        clearTimeout(to); window.__lonaNativeResolveCb = null; rejectP(e);
+      }
+    });
+  }
+  function resolveSmart(url) {
+    var plat = platformOf(url);
+    if (plat && window.LonaAndroid && window.LonaAndroid.resolveOnDevice) {
+      return resolveOnDevice(plat, url).catch(function () { return resolve(url); });
+    }
+    return resolve(url);
+  }
+  function startNativeDownload(res) {
+    var dlUrl = res.direct_url;
+    var fn = res.filename || 'lona-video.mp4';
+    if (res.nativeReferer && window.LonaAndroid.downloadNativeWithReferer) {
+      window.LonaAndroid.downloadNativeWithReferer(dlUrl, fn, res.nativeReferer);
+    } else {
+      window.LonaAndroid.downloadNative(dlUrl, fn);
+    }
+  }
   function downloadFromLib(item, btn) {
     if (busy) return;
     var old = btn.textContent; btn.textContent = 'Fetching…'; btn.disabled = true;
-    resolve(item.sourceUrl).then(function (res) {
+    resolveSmart(item.sourceUrl).then(function (res) {
       if (!res.ok) throw new Error(res.error || 'failed');
+      // On-device result inside the app: direct file URL, no server token.
+      if (res.direct_url && window.LonaAndroid && window.LonaAndroid.downloadNative) {
+        startNativeDownload(res);
+        setStatus('Downloading…', false);
+        btn.textContent = old; btn.disabled = false;
+        return null;
+      }
       btn.textContent = '0%';
       return fetchFile(res.token, function (rec, tot) {
         if (tot > 0) btn.textContent = Math.min(100, Math.round(rec / tot * 100)) + '%';
@@ -476,13 +551,18 @@
       busy = true;
       var nativeUsed = false;
       sphere.classList.add('busy', 'shiver');
-      setStatus('Fetching link…', false);
+      var useNative = !!(platformOf(url) && window.LonaAndroid && window.LonaAndroid.resolveOnDevice);
+      setStatus(useNative ? 'Fetching on your phone…' : 'Fetching link…', false);
       startPulse();
-      Promise.race([resolve(url), new Promise(function (_, rej) { setTimeout(function () { rej(new Error('Server is taking too long — please try again in a moment.')); }, 100000); })]).then(function (res) {
+      Promise.race([resolveSmart(url), new Promise(function (_, rej) { setTimeout(function () { rej(new Error('Server is taking too long — please try again in a moment.')); }, 100000); })]).then(function (res) {
         if (!res.ok) throw new Error(res.error || 'Could not fetch that link.');
         if (window.LonaAndroid && window.LonaAndroid.downloadNative) {
           var dlUrl = res.direct_url || (location.origin + '/api/download?token=' + encodeURIComponent(res.token));
-          window.LonaAndroid.downloadNative(dlUrl, res.filename || 'lona-video.mp4');
+          if (res.nativeReferer && window.LonaAndroid.downloadNativeWithReferer) {
+            window.LonaAndroid.downloadNativeWithReferer(dlUrl, res.filename || 'lona-video.mp4', res.nativeReferer);
+          } else {
+            window.LonaAndroid.downloadNative(dlUrl, res.filename || 'lona-video.mp4');
+          }
           stopPulse(); vibrate(120);
           setStatus('Downloading…', false);
           showProgress(0, 0);
