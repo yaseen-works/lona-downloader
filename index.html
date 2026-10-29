@@ -8,6 +8,7 @@
 <meta name="robots" content="index, follow">
 <link rel="canonical" href="https://lona-downloader.onrender.com/">
 <meta name="google-site-verification" content="wvcAI1go2R-3xKjxwMQi_ZWjA08jm9QCgwM8fCcgInI">
+<meta name="google-site-verification" content="cINEmFv5tDpHseBjv9Xb4g_TwQntZsKJRXsxJKqHg_c">
 <meta name="theme-color" content="#000000">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Lona Downloader">
@@ -347,7 +348,7 @@
     if (!cd) return null;
     var m = /filename\*=UTF-8''([^;]+)/i.exec(cd);
     if (m) { try { return decodeURIComponent(m[1]); } catch (e) { return m[1]; } }
-    m = /filename="?([^";]+)"?/.exec(cd);
+    m = /filename="?([^"]+)"?/.exec(cd);
     return m ? m[1] : null;
   }
 
@@ -368,7 +369,7 @@
           return pump();
         });
       }
-      return pump().then(function (b) { return { blob: b, name: name }; });
+      return pump().then(function (b) { return { blob: b, name: b.name }; });
     });
   }
 
