@@ -343,21 +343,26 @@ def media_id(platform, url):
 # --------------------------------------------------------------------------
 
 def resolve_tiktok(url):
-    # Primary: tikwm API (HD, no watermark). Some hosts' IPs get a non-JSON
-    # block page from tikwm — any failure falls back to yt-dlp extraction.
-    try:
-        api = "https://www.tikwm.com/api/?url=" + urllib.parse.quote(url, safe="") + "&hd=1"
-        r = HTTP.get(api, timeout=30)
-        d = r.json()
-        if d.get("code") == 0 and d.get("data"):
-            data = d["data"]
-            play = data.get("hdplay") or data.get("play")
-            if play:
-                return {"kind": "direct", "url": play, "referer": "https://www.tiktok.com/",
-                        "title": (data.get("title") or "TikTok video").strip(), "ext": "mp4",
-                        "thumbnail": data.get("cover") or data.get("origin_cover")}
-    except Exception:
-        pass
+    # Primary: tikwm API (HD, no watermark). Some datacenter IPs (like our
+    # host's) intermittently get a non-JSON block page from tikwm — retry once
+    # in case the block is transient, then fall back to yt-dlp extraction.
+    for _attempt in range(2):
+        if _attempt:
+            time.sleep(3)
+        try:
+            api = "https://www.tikwm.com/api/?url=" + urllib.parse.quote(url, safe="") + "&hd=1"
+            r = HTTP.get(api, timeout=30)
+            d = r.json()
+            if d.get("code") == 0 and d.get("data"):
+                data = d["data"]
+                play = data.get("hdplay") or data.get("play")
+                if play:
+                    return {"kind": "direct", "url": play, "referer": "https://www.tiktok.com/",
+                            "title": (data.get("title") or "TikTok video").strip(), "ext": "mp4",
+                            "thumbnail": data.get("cover") or data.get("origin_cover")}
+                break  # valid response but no play URL — retrying won't help
+        except Exception:
+            continue
     return resolve_ytdlp("tiktok", url)
 
 
